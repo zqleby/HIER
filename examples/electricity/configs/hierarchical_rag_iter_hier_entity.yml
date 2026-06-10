@@ -1,0 +1,110 @@
+# Iterative Hierarchical Retrieval + Entity Ranking Configuration
+# Combines: Hierarchical Retrieval + Entity Ranking + Iterative Retry
+
+dotenv_path: null
+
+log_root_dir: logs/electricity
+experiment_name: hierarchical_rag_iter_hier_entity
+
+test_jsonl_filename: null
+test_rounds: 1
+
+workflow:
+  module_path: pikerag.workflows.qa
+  class_name: QaWorkflow
+  args:
+    num_parallel: 6
+
+test_loading:
+  module: pikerag.utils.data_protocol_utils
+  name: load_testing_suite
+  args:
+    filepath: data/electricity/qa_output_augmented.jsonl
+
+qa_protocol:
+  module_path: pikerag.prompts.qa
+  attr_name: generation_qa_with_reference_protocol
+
+llm_client:
+  module_path: pikerag.llm_client
+  class_name: StandardOpenAIClient
+  args: {}
+
+  llm_config:
+    model: qwen-plus-latest
+    temperature: 0
+
+  cache_config:
+    location_prefix: null
+    auto_dump: True
+
+# LLM for generating answers during iteration
+answer_llm:
+  module_path: pikerag.llm_client
+  class_name: StandardOpenAIClient
+  args: {}
+
+  llm_config:
+    model: qwen-plus-latest
+    temperature: 0
+
+# Entity extraction LLM
+entity_llm:
+  module_path: pikerag.llm_client
+  class_name: StandardOpenAIClient
+  args: {}
+
+  llm_config:
+    model: qwen-plus-latest
+    temperature: 0
+
+retriever:
+  module_path: pikerag.knowledge_retrievers
+  class_name: IterHierarchicalEntityRetriever
+  args:
+    retrieve_k: 10
+    retrieve_score_threshold: 0.0
+
+    # Iterative configuration
+    max_retries: 3
+    retry_increment: 5
+
+    # Entity ranking
+    use_entity_ranking: true
+    entity_weight: 0.5
+    similarity_weight: 0.5
+
+    # Hierarchical Retrieval Configuration
+    hierarchy_threshold: 0.6
+    hierarchy_meta_name: "parent_title"
+    expand_to_section: true
+
+    retrieval_query:
+      module_path: pikerag.knowledge_retrievers.query_parsers
+      func_name: question_as_query
+
+    vector_store:
+      collection_name: electricity_hierarchical
+      persist_directory: data/vector_stores/electricity_hierarchical
+
+      id_document_loading:
+        module_path: pikerag.utils.data_protocol_utils
+        func_name: load_ids_and_chunks_with_hierarchy
+        args:
+          filepath: data/electricity/chunks_with_entities.jsonl
+          title_prefix: "[层级]"
+          content_prefix: "[正文]"
+
+      embedding_setting:
+        module_path: pikerag.llm_client.standard_openai_api
+        class_name: StandardOpenAIEmbedding
+        args:
+          model: text-embedding-v3
+
+evaluator:
+  metrics:
+    - ExactMatch
+    - F1
+    - Precision
+    - Recall
+    - LLM

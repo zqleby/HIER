@@ -1,0 +1,122 @@
+# RAG-Fusion Configuration
+# Implements multi-query generation with RRF (Reciprocal Rank Fusion)
+
+################################################################################
+# Environment Variable Setting
+################################################################################
+dotenv_path: null
+
+
+################################################################################
+# Logging Setting
+################################################################################
+log_root_dir: logs/electricity
+experiment_name: rag_fusion
+test_jsonl_filename: null
+test_rounds: 1
+
+
+################################################################################
+# Workflow Setting
+################################################################################
+workflow:
+  module_path: pikerag.workflows.qa
+  class_name: QaWorkflow
+
+
+################################################################################
+# Testing Suite Setting
+################################################################################
+test_loading:
+  module: pikerag.utils.data_protocol_utils
+  name: load_testing_suite
+  args:
+    filepath: data/electricity/qa_output_augmented.jsonl
+
+
+################################################################################
+# Prompt Setting
+################################################################################
+qa_protocol:
+  module_path: pikerag.prompts.qa
+  attr_name: generation_qa_with_reference_protocol
+
+
+################################################################################
+# LLM Setting
+################################################################################
+llm_client:
+  module_path: pikerag.llm_client
+  class_name: StandardOpenAIClient
+  args: {}
+
+  llm_config:
+    model: qwen-plus-latest
+    temperature: 0
+
+  cache_config:
+    location_prefix: null
+    auto_dump: True
+
+
+################################################################################
+# RAG-Fusion Retriever Setting
+################################################################################
+retriever:
+  module_path: pikerag.knowledge_retrievers
+  class_name: RagFusionRetriever
+  args:
+    retrieve_k: 8
+    retrieve_score_threshold: 0.2
+
+    # RAG-Fusion specific settings
+    num_queries: 4                    # Generate N query variations
+    per_query_k: 8                    # Retrieve K docs per query (before fusion)
+    rrf_k: 60                         # RRF fusion parameter
+
+    # Query generation LLM (can use same or different LLM)
+    query_generation_llm:
+      module_path: pikerag.llm_client
+      class_name: StandardOpenAIClient
+      args: {}
+      llm_config:
+        model: qwen-plus-latest
+        temperature: 0.5              # Higher temperature for diverse query variations
+      cache_config:
+        location_prefix: null
+        auto_dump: True
+
+    # Query Setting (used for single query fallback)
+    ############################################################################
+    retrieval_query:
+      module_path: pikerag.knowledge_retrievers.query_parsers
+      func_name: question_as_query
+
+    # Vector Store Configuration
+    vector_store:
+      collection_name: electricity_chunks
+      persist_directory: data/vector_stores/electricity
+
+      id_document_loading:
+        module_path: pikerag.utils.data_protocol_utils
+        func_name: load_ids_and_chunks
+        args:
+          filepath: data/electricity/chunks_output.jsonl
+
+      embedding_setting:
+        module_path: pikerag.llm_client.standard_openai_api
+        class_name: StandardOpenAIEmbedding
+        args:
+          model: text-embedding-v3
+
+
+################################################################################
+# Evaluator Setting
+################################################################################
+evaluator:
+  metrics:
+    - ExactMatch
+    - F1
+    - Precision
+    - Recall
+    - LLM

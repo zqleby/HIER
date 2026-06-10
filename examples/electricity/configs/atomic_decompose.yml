@@ -1,0 +1,115 @@
+# Environment Variable Setting
+################################################################################
+dotenv_path: null
+
+
+# Logging Setting
+################################################################################
+log_root_dir: logs/electricity
+
+experiment_name: atomic_decompose
+
+test_jsonl_filename: null
+
+test_rounds: 1
+
+
+# Workflow Setting
+################################################################################
+workflow:
+  module_path: pikerag.workflows.qa_decompose
+  class_name: QaDecompositionWorkflow
+  args:
+    max_num_question: 5
+    question_similarity_threshold: 0.999
+
+
+# Testing Suite Setting
+################################################################################
+test_loading:
+  module: pikerag.utils.data_protocol_utils
+  name: load_testing_suite
+  args:
+    filepath: data/electricity/qa_output_augmented.jsonl
+
+
+# Prompt Setting
+################################################################################
+decompose_proposal_protocol:
+  module_path: pikerag.prompts.decomposition
+  protocol_name: question_decompose_protocol
+
+selection_protocol:
+  module_path: pikerag.prompts.decomposition
+  protocol_name: atom_question_selection_protocol
+
+backup_selection_protocol:
+  module_path: pikerag.prompts.decomposition
+  protocol_name: chunk_selection_protocol
+
+original_question_answering_protocol:
+  module_path: pikerag.prompts.decomposition
+  protocol_name: final_qa_protocol
+
+
+# LLM Setting
+################################################################################
+llm_client:
+  module_path: pikerag.llm_client
+  class_name: StandardOpenAIClient
+  args: {}
+
+  llm_config:
+    model: qwen-plus-latest
+    temperature: 0
+
+  cache_config:
+    location_prefix: null
+    auto_dump: True
+
+
+# Retriever Setting: Chunk-Atom Retrieval
+################################################################################
+retriever:
+  module_path: pikerag.knowledge_retrievers
+  class_name: ChunkAtomRetriever
+  args:
+    retrieve_k: 8
+    retrieve_score_threshold: 0.5
+
+    atom_retrieve_k: 4
+
+    vector_store:
+      collection_name: electricity_atoms
+      persist_directory: data/vector_stores/electricity_atoms
+
+      id_document_loading:
+        module_path: pikerag.utils.data_protocol_utils
+        func_name: load_ids_and_chunks
+        args:
+          filepath: data/electricity/chunks_200_with_atom_questions.jsonl
+          atom_tag: atom_questions
+
+      id_atom_loading:
+        module_path: pikerag.utils.data_protocol_utils
+        func_name: load_ids_and_atoms
+        args:
+          filepath: data/electricity/chunks_200_with_atom_questions.jsonl
+          atom_tag: atom_questions
+
+      embedding_setting:
+        module_path: pikerag.llm_client.standard_openai_api
+        class_name: StandardOpenAIEmbedding
+        args:
+          model: text-embedding-v3
+
+
+# Evaluator Setting
+################################################################################
+evaluator:
+  metrics:
+    - ExactMatch
+    - F1
+    - Precision
+    - Recall
+    - LLM
